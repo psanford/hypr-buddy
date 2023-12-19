@@ -11,7 +11,8 @@ import (
 var doGotoNextWorkspace = flag.Bool("ws-next", false, "goto next workspace")
 var doGotoPrevWorkspace = flag.Bool("ws-prev", false, "goto next workspace")
 
-const wsCount = 10
+const wsMax = 10
+const wsMin = 1
 
 func main() {
 	flag.Parse()
@@ -37,9 +38,12 @@ func gotoNextWS(n int64) {
 		panic(err)
 	}
 
-	nextID := (wsInfo.ID + n) % wsCount
-	if nextID < 1 {
-		nextID = 1
+	nextID := wsInfo.ID + n
+	if nextID > wsMax {
+		nextID = wsMin
+	}
+	if nextID < wsMin {
+		nextID = wsMax
 	}
 
 	err = c.DispatchRaw(fmt.Sprintf("workspace %d", nextID))
