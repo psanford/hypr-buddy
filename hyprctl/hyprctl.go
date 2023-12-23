@@ -42,7 +42,7 @@ func (c *Client) conn() (net.Conn, error) {
 	return net.Dial("unix", c.p)
 }
 
-func (c *Client) ActiveWorkspace() (*ActiveWorkspace, error) {
+func (c *Client) ActiveWorkspace() (*Workspace, error) {
 	conn, err := c.conn()
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to %s: %w", c.p, err)
@@ -55,13 +55,35 @@ func (c *Client) ActiveWorkspace() (*ActiveWorkspace, error) {
 	}
 
 	d := json.NewDecoder(conn)
-	var resp ActiveWorkspace
+	var resp Workspace
 	err = d.Decode(&resp)
 	if err != nil {
 		return nil, err
 	}
 
 	return &resp, nil
+}
+
+func (c *Client) Monitors() ([]Monitor, error) {
+	conn, err := c.conn()
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to %s: %w", c.p, err)
+	}
+	defer conn.Close()
+
+	_, err = conn.Write([]byte("j/monitors"))
+	if err != nil {
+		return nil, err
+	}
+
+	d := json.NewDecoder(conn)
+	var resp []Monitor
+	err = d.Decode(&resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func (c *Client) Windows() ([]Window, error) {
@@ -105,7 +127,7 @@ func (c *Client) DispatchRaw(args string) error {
 	return nil
 }
 
-type ActiveWorkspace struct {
+type Workspace struct {
 	HasFullScreen   bool   `json:"hasfullscreen"`
 	ID              int64  `json:"id"`
 	LastWindow      string `json:"lastwindow"`
@@ -141,4 +163,33 @@ type Window struct {
 		Name string `json:"name"`
 	} `json:"workspace"`
 	Xwayland bool `json:"xwayland"`
+}
+
+type Monitor struct {
+	ActiveWorkspace struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	} `json:"activeWorkspace"`
+	ActivelyTearing  bool    `json:"activelyTearing"`
+	Description      string  `json:"description"`
+	DpmsStatus       bool    `json:"dpmsStatus"`
+	Focused          bool    `json:"focused"`
+	Height           int64   `json:"height"`
+	ID               int64   `json:"id"`
+	Make             string  `json:"make"`
+	Model            string  `json:"model"`
+	Name             string  `json:"name"`
+	RefreshRate      float64 `json:"refreshRate"`
+	Reserved         []int64 `json:"reserved"`
+	Scale            float64 `json:"scale"`
+	Serial           string  `json:"serial"`
+	SpecialWorkspace struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	} `json:"specialWorkspace"`
+	Transform int64 `json:"transform"`
+	Vrr       bool  `json:"vrr"`
+	Width     int64 `json:"width"`
+	X         int64 `json:"x"`
+	Y         int64 `json:"y"`
 }

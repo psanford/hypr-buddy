@@ -11,7 +11,13 @@ import (
 
 var doGotoNextWorkspace = flag.Bool("ws-next", false, "goto next workspace")
 var doGotoPrevWorkspace = flag.Bool("ws-prev", false, "goto next workspace")
+
+// var doFocusNext = flag.Bool("focus-next", false, "focus next window")
+// var doFocusPrev = flag.Bool("focus-prev", false, "focus prev window")
+var doMasterGrow = flag.Bool("master-grow", false, "grow master region")
+var doMasterShrink = flag.Bool("master-shrink", false, "shrink master region")
 var doToggleStack = flag.Bool("toggle-stack", false, "toggle stacked windows")
+var runDaemon = flag.Bool("daemon", false, "run daemon")
 
 const wsMax = 10
 const wsMin = 1
@@ -19,16 +25,58 @@ const wsMin = 1
 func main() {
 	flag.Parse()
 
-	if *doGotoNextWorkspace {
+	if *runDaemon {
+		newServer().Serve()
+	} else if *doGotoNextWorkspace {
 		gotoNextWS(1)
 	} else if *doGotoPrevWorkspace {
 		gotoNextWS(-1)
 	} else if *doToggleStack {
 		toggleStack()
+		// } else if *doFocusNext {
+		// 	focusNext(1)
+		// } else if *doFocusPrev {
+		// 	focusNext(-1)
+	} else if *doMasterGrow {
+		masterGrow(0.05)
+	} else if *doMasterShrink {
+		masterGrow(-0.05)
 	} else {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
+}
+
+func masterGrow(n float64) {
+	c, err := hyprctl.New()
+	if err != nil {
+		panic(err)
+	}
+
+	windows := activeWorkspaceWindows(c)
+
+	master := windows[0]
+	width := master.Size[0]
+
+	monitors, err := c.Monitors()
+	if err != nil {
+		panic(err)
+	}
+
+	var monitorWidth float64
+	for _, m := range monitors {
+		if m.ID == master.Monitor {
+			monitorWidth = float64(m.Width) / m.Scale
+			break
+		}
+	}
+
+	curRatio := float64(width) / float64(monitorWidth)
+
+	newRatio := curRatio + n
+
+	c.DispatchRaw(fmt.Sprintf("layoutmsg mfact %.02f", newRatio))
+	c.DispatchRaw("forcerendererreload")
 }
 
 func gotoNextWS(n int64) {
@@ -54,6 +102,35 @@ func gotoNextWS(n int64) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func activeWorkspaceWindows(c *hyprctl.Client) []hyprctl.Window {
+	wsInfo, err := c.ActiveWorkspace()
+	if err != nil {
+		panic(err)
+	}
+
+	allWindows, err := c.Windows()
+	if err != nil {
+		panic(err)
+	}
+
+	var wsWindows []hyprctl.Window
+	for _, w := range allWindows {
+		if w.Workspace.ID == wsInfo.ID {
+			wsWindows = append(wsWindows, w)
+		}
+	}
+	sort.Sort(WindowSort(wsWindows))
+
+	return wsWindows
+}
+
+func focusNext(n int) {
+}
+
+func hiddenWSName(ws *hyprctl.Workspace) string {
+	return fmt.Sprintf("special:hidden-%d", ws.ID)
 }
 
 func toggleStack() {
@@ -83,7 +160,7 @@ func toggleStack() {
 
 	sort.Sort(WindowSort(allWindows))
 
-	hiddenName := fmt.Sprintf("special:hidden-%d", wsInfo.ID)
+	hiddenName := hiddenWSName(wsInfo)
 
 	var count int
 	var masterWindow hyprctl.Window
