@@ -64,6 +64,28 @@ func (c *Client) ActiveWorkspace() (*ActiveWorkspace, error) {
 	return &resp, nil
 }
 
+func (c *Client) Windows() ([]Window, error) {
+	conn, err := c.conn()
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to %s: %w", c.p, err)
+	}
+	defer conn.Close()
+
+	_, err = conn.Write([]byte("j/clients"))
+	if err != nil {
+		return nil, err
+	}
+
+	d := json.NewDecoder(conn)
+	var resp []Window
+	err = d.Decode(&resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func (c *Client) DispatchRaw(args string) error {
 	conn, err := c.conn()
 	if err != nil {
@@ -92,4 +114,31 @@ type ActiveWorkspace struct {
 	MonitorID       int64  `json:"monitorID"`
 	Name            string `json:"name"`
 	Windows         int64  `json:"windows"`
+}
+
+type Window struct {
+	Address        string        `json:"address"`
+	At             []int64       `json:"at"`
+	Class          string        `json:"class"`
+	FakeFullscreen bool          `json:"fakeFullscreen"`
+	Floating       bool          `json:"floating"`
+	FocusHistoryID int64         `json:"focusHistoryID"`
+	Fullscreen     bool          `json:"fullscreen"`
+	FullscreenMode int64         `json:"fullscreenMode"`
+	Grouped        []interface{} `json:"grouped"`
+	Hidden         bool          `json:"hidden"`
+	InitialClass   string        `json:"initialClass"`
+	InitialTitle   string        `json:"initialTitle"`
+	Mapped         bool          `json:"mapped"`
+	Monitor        int64         `json:"monitor"`
+	Pid            int64         `json:"pid"`
+	Pinned         bool          `json:"pinned"`
+	Size           []int64       `json:"size"`
+	Swallowing     string        `json:"swallowing"`
+	Title          string        `json:"title"`
+	Workspace      struct {
+		ID   int64  `json:"id"`
+		Name string `json:"name"`
+	} `json:"workspace"`
+	Xwayland bool `json:"xwayland"`
 }
