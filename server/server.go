@@ -39,6 +39,11 @@ type WorkspaceDesiredState struct {
 
 type LayoutMode int
 
+var (
+	OpenWindowEvt  = "openwindow"
+	CloseWindowEvt = "closewindow"
+)
+
 const (
 	LayoutPrimaryWithStack LayoutMode = iota
 	LayoutSingleWindow
@@ -98,7 +103,17 @@ OUTER:
 			if !ok {
 				break OUTER
 			}
-			_ = evt
+
+			if evt.Name == OpenWindowEvt {
+				parts := strings.SplitN(evt.Data, ",", 2)
+				s.handleWindowOpen("0x" + parts[0])
+
+			} else if evt.Name == CloseWindowEvt {
+				s.handleWindowClose("0x" + evt.Data)
+				//closewindow>>cdb5bd0
+
+			}
+
 			// log.Printf("window evt: %s %s", evt.Name, evt.Data)
 		case evt := <-s.userEvt:
 			log.Printf("user evt: %s", evt)
@@ -345,15 +360,6 @@ func (s *server) handleFocus(w http.ResponseWriter, r *http.Request) {
 		windowsByID[w.Address] = w
 	}
 
-	printOrder := func(label string, order []string) {
-		log.Printf("%s: %v", label, order)
-		names := make([]string, len(order))
-		for i, addr := range order {
-			names[i] = windowNames[addr]
-		}
-		log.Printf("%s(names): %v", label, names)
-	}
-
 	hiddenName := hiddenWSName(wsInfo)
 
 	if wsState.Layout == LayoutPrimaryWithStack {
@@ -405,6 +411,80 @@ func (s *server) handleFocus(w http.ResponseWriter, r *http.Request) {
 
 		c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %s,address:%s", hiddenName, oldMaster))
 	}
+}
+
+func (s *server) handleWindowOpen(id string) {
+	log.Printf("evt window open %s", id)
+	c, err := hyprctl.New()
+	if err != nil {
+		panic(err)
+	}
+
+	wsInfo, err := c.ActiveWorkspace()
+	if err != nil {
+		panic(err)
+	}
+
+	wsState := s.getWSStateByID(wsInfo.ID)
+
+	if wsState.Layout != LayoutSingleWindow {
+		return
+	}
+
+	allWindows, err := c.Windows()
+	if err != nil {
+		panic(err)
+	}
+
+	sort.Sort(WindowSort(allWindows))
+
+	for _, w := range allWindows {
+		if w.Address == id {
+			if w.Floating {
+				// floating windows are not part of the stack
+				return
+			}
+		}
+	}
+
+	if len(wsState.WindowOrder) > 0 {
+		oldMaster := wsState.WindowOrder[0]
+		hiddenName := hiddenWSName(wsInfo)
+		c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %s,address:%s", hiddenName, oldMaster))
+	}
+
+	wsState.WindowOrder = append([]string{id}, wsState.WindowOrder...)
+}
+
+func (s *server) handleWindowClose(id string) {
+	log.Printf("evt window close %s", id)
+	c, err := hyprctl.New()
+	if err != nil {
+		panic(err)
+	}
+
+	wsInfo, err := c.ActiveWorkspace()
+	if err != nil {
+		panic(err)
+	}
+
+	wsState := s.getWSStateByID(wsInfo.ID)
+
+	if wsState.Layout != LayoutSingleWindow {
+		return
+	}
+
+	if len(wsState.WindowOrder) < 2 {
+		return
+	}
+
+	if wsState.WindowOrder[0] != id {
+		return
+	}
+
+	wsState.WindowOrder = wsState.WindowOrder[1:]
+
+	c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %d,address:%s", wsInfo.ID, wsState.WindowOrder[0]))
 }
 
 func (s *server) getWSStateByID(id int64) *WorkspaceDesiredState {
