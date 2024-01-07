@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,8 +60,10 @@ func New() *server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/ping", s.handlePing)
+	mux.HandleFunc("/debug", s.handleDebugState)
 	mux.HandleFunc("/debug/state", s.handleDebugState)
 	mux.HandleFunc("/toggleStack", s.handleToggleStack)
+	mux.HandleFunc("/focus", s.handleFocus)
 
 	s.handler = logmiddleware.New(mux)
 
@@ -95,7 +98,8 @@ OUTER:
 			if !ok {
 				break OUTER
 			}
-			log.Printf("window evt: %s %s", evt.Name, evt.Data)
+			_ = evt
+			// log.Printf("window evt: %s %s", evt.Name, evt.Data)
 		case evt := <-s.userEvt:
 			log.Printf("user evt: %s", evt)
 		case <-ctx.Done():
@@ -222,23 +226,18 @@ func (s *server) handleToggleStack(w http.ResponseWriter, r *http.Request) {
 	if wsState.Layout == LayoutSingleWindow {
 		windowOrder := make([]string, 0, 10)
 
-		otherWindows := make([]hyprctl.Window, 0, len(allWindows))
+		wsWindows := make([]hyprctl.Window, 0, 10)
 		for _, w := range allWindows {
 			if w.Workspace.ID != wsInfo.ID {
 				continue
 			}
 
 			windowOrder = append(windowOrder, w.Address)
-
-			if w.Address != wsInfo.LastWindow { // LastWindow is the focused window
-				otherWindows = append(otherWindows, w)
-				if !w.Floating {
-					c.DispatchRaw(fmt.Sprintf("togglefloating address:%s", w.Address))
-				}
-			}
+			wsWindows = append(wsWindows, w)
 		}
 
-		for _, w := range otherWindows {
+		// move all the windows except the master to the shadow workspace
+		for _, w := range wsWindows[1:] {
 			c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %s,address:%s", hiddenName, w.Address))
 		}
 
@@ -251,7 +250,6 @@ func (s *server) handleToggleStack(w http.ResponseWriter, r *http.Request) {
 			}
 
 			c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %d,address:%s", wsInfo.ID, w.Address))
-			c.DispatchRaw(fmt.Sprintf("togglefloating address:%s", w.Address))
 		}
 		s.moveWindowsToOrder(c, wsInfo, wsState.WindowOrder)
 	}
@@ -274,22 +272,30 @@ func (s *server) moveWindowsToOrder(c *hyprctl.Client, wsInfo *hyprctl.Workspace
 	}
 
 	for i, addr := range desiredOrder {
-		startIdx := -1
-		for j, win := range wsWindows {
+		startIdx := -100
+		for j := 0; j < len(wsWindows); j++ {
+			win := wsWindows[j]
 			if win.Address == addr {
+				log.Printf("move %s (%s) to position %d; cur=%d", addr, win.Class, i, j)
 				startIdx = j
+				break
 			}
 		}
 		moveAmt := i - startIdx
 
-		if moveAmt < 0 {
-			log.Printf("moveAmt %d < 0; this should not happen", moveAmt)
+		if moveAmt > 0 {
+			log.Printf("moveAmt %d > 0; this should not happen i=%d j=%d addr=%s", moveAmt, i, startIdx, addr)
 			return
 		}
 
-		c.DispatchRaw(fmt.Sprintf("focuswindow address:%s", addr))
-		for n := 0; i < moveAmt; n++ {
+		moveAmt *= -1
+
+		for n := 0; n < moveAmt; n++ {
+			c.DispatchRaw(fmt.Sprintf("focuswindow address:%s", addr))
 			c.DispatchRaw("layoutmsg swapprev")
+
+			log.Printf("swap %d %d", startIdx-n, startIdx-n-1)
+			wsWindows[startIdx-n], wsWindows[startIdx-n-1] = wsWindows[startIdx-n-1], wsWindows[startIdx-n]
 		}
 	}
 
@@ -298,10 +304,107 @@ func (s *server) moveWindowsToOrder(c *hyprctl.Client, wsInfo *hyprctl.Workspace
 	}
 }
 
-func (s *server) handleFocusNext(w http.ResponseWriter, r *http.Request) {
-}
+func (s *server) handleFocus(w http.ResponseWriter, r *http.Request) {
+	lgr := logmiddleware.LgrFromContext(r.Context())
+	n := 1
+	nStr := r.FormValue("n")
+	if nStr != "" {
+		var err error
+		n, err = strconv.Atoi(nStr)
+		if err != nil {
+			lgr.Error("invalid non-numeric n value", "n", nStr)
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, "Bad request invalid non-numeric n parameter")
+			return
+		}
+	}
 
-func (s *server) handleFocusPrev(w http.ResponseWriter, r *http.Request) {
+	c, err := hyprctl.New()
+	if err != nil {
+		panic(err)
+	}
+
+	wsInfo, err := c.ActiveWorkspace()
+	if err != nil {
+		panic(err)
+	}
+
+	wsState := s.getWSStateByID(wsInfo.ID)
+
+	allWindows, err := c.Windows()
+	if err != nil {
+		panic(err)
+	}
+
+	sort.Sort(WindowSort(allWindows))
+
+	windowsByID := make(map[string]hyprctl.Window)
+	windowNames := make(map[string]string)
+	for _, w := range allWindows {
+		windowNames[w.Address] = fmt.Sprintf("[%s/%s]", w.InitialClass, w.InitialTitle)
+		windowsByID[w.Address] = w
+	}
+
+	printOrder := func(label string, order []string) {
+		log.Printf("%s: %v", label, order)
+		names := make([]string, len(order))
+		for i, addr := range order {
+			names[i] = windowNames[addr]
+		}
+		log.Printf("%s(names): %v", label, names)
+	}
+
+	hiddenName := hiddenWSName(wsInfo)
+
+	if wsState.Layout == LayoutPrimaryWithStack {
+		cmd := "layoutmsg cyclenext"
+		if n < 0 {
+			cmd = "layoutmsg cycleprev"
+		}
+		log.Printf("Multi layout, cmd: %s", cmd)
+		c.DispatchRaw(cmd)
+	} else {
+		if len(wsState.WindowOrder) < 2 {
+			log.Printf("window order < 2, nothing to toggle")
+			return
+		}
+
+		oldMaster := wsState.WindowOrder[0]
+
+		var newMaster string
+		newOrder := make([]string, len(wsState.WindowOrder))
+		if n < 0 { // cycle prev
+			newMaster = wsState.WindowOrder[len(wsState.WindowOrder)-1]
+
+			// before:
+			// [a, b, c, d, e]
+			// after:
+			// [e, a, b, c, d]
+
+			newOrder[0] = newMaster
+			newOrder[1] = oldMaster
+			if len(wsState.WindowOrder) > 2 {
+				copy(newOrder[2:], wsState.WindowOrder[1:len(wsState.WindowOrder)-1])
+			}
+
+		} else { // cycle next
+			newMaster = wsState.WindowOrder[1]
+
+			// before:
+			// [a, b, c, d, e]
+			// after:
+			// [b, c, d, e, a]
+
+			copy(newOrder, wsState.WindowOrder[1:])
+			newOrder[len(newOrder)-1] = oldMaster
+		}
+
+		wsState.WindowOrder = newOrder
+
+		c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %d,address:%s", wsInfo.ID, newMaster))
+
+		c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %s,address:%s", hiddenName, oldMaster))
+	}
 }
 
 func (s *server) getWSStateByID(id int64) *WorkspaceDesiredState {

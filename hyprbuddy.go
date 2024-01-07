@@ -16,8 +16,6 @@ import (
 var doGotoNextWorkspace = flag.Bool("ws-next", false, "goto next workspace")
 var doGotoPrevWorkspace = flag.Bool("ws-prev", false, "goto next workspace")
 
-// var doFocusNext = flag.Bool("focus-next", false, "focus next window")
-// var doFocusPrev = flag.Bool("focus-prev", false, "focus prev window")
 var doMasterGrow = flag.Bool("master-grow", false, "grow master region")
 var doMasterShrink = flag.Bool("master-shrink", false, "shrink master region")
 var doToggleStack = flag.Bool("toggle-stack", false, "toggle stacked windows")
@@ -25,6 +23,8 @@ var runDaemon = flag.Bool("daemon", false, "run daemon")
 var doPing = flag.Bool("ping", false, "ping daemon")
 
 var doToggleStack2 = flag.Bool("toggle-stack-2", false, "toggle stacked windows")
+var doFocusNext = flag.Bool("focus-next", false, "focus next window")
+var doFocusPrev = flag.Bool("focus-prev", false, "focus prev window")
 
 const wsMax = 10
 const wsMin = 1
@@ -41,10 +41,6 @@ func main() {
 		gotoNextWS(-1)
 	} else if *doToggleStack {
 		toggleStack()
-		// } else if *doFocusNext {
-		// 	focusNext(1)
-		// } else if *doFocusPrev {
-		// 	focusNext(-1)
 	} else if *doMasterGrow {
 		masterGrow(0.05)
 	} else if *doMasterShrink {
@@ -58,6 +54,18 @@ func main() {
 
 	} else if *doToggleStack2 {
 		err := client.NewClient().ToggleStack()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("ok\n")
+	} else if *doFocusNext {
+		err := client.NewClient().FocusNext()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("ok\n")
+	} else if *doFocusPrev {
+		err := client.NewClient().FocusPrev()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -146,9 +154,6 @@ func activeWorkspaceWindows(c *hyprctl.Client) []hyprctl.Window {
 	sort.Sort(WindowSort(wsWindows))
 
 	return wsWindows
-}
-
-func focusNext(n int) {
 }
 
 func hiddenWSName(ws *hyprctl.Workspace) string {

@@ -64,6 +64,16 @@ func (c *Client) ToggleStack() error {
 	return err
 }
 
+func (c *Client) FocusNext() error {
+	_, err := c.plainRequest("/focus?n=1")
+	return err
+}
+
+func (c *Client) FocusPrev() error {
+	_, err := c.plainRequest("/focus?n=-1")
+	return err
+}
+
 func (c *Client) plainRequest(path string) (string, error) {
 	resp, err := c.httpClient.Get(fakeHost + path)
 	if err != nil {

@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"os"
 )
 
 type Client struct {
-	p string
+	p       string
+	LogCmds bool
 }
 
 func New() (*Client, error) {
@@ -109,6 +111,9 @@ func (c *Client) Windows() ([]Window, error) {
 }
 
 func (c *Client) DispatchRaw(args string) error {
+	if c.LogCmds {
+		log.Printf("/dispatch %s", args)
+	}
 	conn, err := c.conn()
 	if err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", c.p, err)
