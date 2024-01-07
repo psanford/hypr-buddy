@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"sort"
 
+	"github.com/psanford/hypr-buddy/client"
 	"github.com/psanford/hypr-buddy/hyprctl"
+	"github.com/psanford/hypr-buddy/server"
 )
 
 var doGotoNextWorkspace = flag.Bool("ws-next", false, "goto next workspace")
@@ -18,6 +22,9 @@ var doMasterGrow = flag.Bool("master-grow", false, "grow master region")
 var doMasterShrink = flag.Bool("master-shrink", false, "shrink master region")
 var doToggleStack = flag.Bool("toggle-stack", false, "toggle stacked windows")
 var runDaemon = flag.Bool("daemon", false, "run daemon")
+var doPing = flag.Bool("ping", false, "ping daemon")
+
+var doToggleStack2 = flag.Bool("toggle-stack-2", false, "toggle stacked windows")
 
 const wsMax = 10
 const wsMin = 1
@@ -26,7 +33,8 @@ func main() {
 	flag.Parse()
 
 	if *runDaemon {
-		newServer().Serve()
+		ctx := context.Background()
+		server.New().Serve(ctx)
 	} else if *doGotoNextWorkspace {
 		gotoNextWS(1)
 	} else if *doGotoPrevWorkspace {
@@ -41,6 +49,20 @@ func main() {
 		masterGrow(0.05)
 	} else if *doMasterShrink {
 		masterGrow(-0.05)
+	} else if *doPing {
+		err := client.NewClient().Ping()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("ok\n")
+
+	} else if *doToggleStack2 {
+		err := client.NewClient().ToggleStack()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("ok\n")
+
 	} else {
 		flag.PrintDefaults()
 		os.Exit(1)

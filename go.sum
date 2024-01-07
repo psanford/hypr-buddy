@@ -1,0 +1,4 @@
+github.com/felixge/httpsnoop v1.0.1 h1:lvB5Jl89CsZtGIWuTcDM1E/vkVs49/Ml7JJe07l8SPQ=
+github.com/felixge/httpsnoop v1.0.1/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
+github.com/psanford/logmiddleware v0.0.0-20231209180300-4afd915e4acf h1:RszV/Fqi5YdObZPXbPoPbEM40IcO6+sL82kZoBX69lc=
+github.com/psanford/logmiddleware v0.0.0-20231209180300-4afd915e4acf/go.mod h1:Fi1VTdYX5GXC6Msa8ordnVIagGGh19S7nCGzRCqKpqs=
