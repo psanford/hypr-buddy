@@ -154,6 +154,49 @@ func (c *Client) DispatchRaw(args string) error {
 	return nil
 }
 
+func (c *Client) GetOption(opt string) (*Option, error) {
+	conn, err := c.conn()
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to %s: %w", c.p, err)
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, "j/getoption %s", opt)
+	dec := json.NewDecoder(conn)
+	var resp Option
+	err = dec.Decode(&resp)
+
+	return &resp, err
+}
+
+func (c *Client) SetOption(opt, value string) error {
+	conn, err := c.conn()
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", c.p, err)
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, "/keyword %s %s", opt, value)
+	r := bufio.NewReader(conn)
+	b, err := r.ReadBytes('\n')
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(b, []byte("ok")) {
+		return fmt.Errorf("error result: %s", b)
+	}
+	return nil
+}
+
+type Option struct {
+	Data   string  `json:"data"`
+	Float  float64 `json:"float"`
+	Int    int64   `json:"int"`
+	Option string  `json:"option"`
+	Set    bool    `json:"set"`
+	Str    string  `json:"str"`
+}
+
 type Workspace struct {
 	HasFullScreen   bool   `json:"hasfullscreen"`
 	ID              int64  `json:"id"`

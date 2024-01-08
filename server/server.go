@@ -70,6 +70,7 @@ func New() *server {
 	mux.HandleFunc("/toggle-stack", s.handleToggleStack)
 	mux.HandleFunc("/focus", s.handleFocus)
 	mux.HandleFunc("/unhide-all", s.handleUnhideAll)
+	mux.HandleFunc("/toggle-bling", s.handleToggleBlingMode)
 
 	s.handler = logmiddleware.New(mux)
 
@@ -84,6 +85,9 @@ type HyprEvent struct {
 func (s *server) Serve(parentCtx context.Context) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
+
+	// unhide any previously hidden windows
+	s.unhideAll()
 
 	go func() {
 		err := s.acceptEventsFromHypr(ctx)
@@ -272,6 +276,10 @@ func (s *server) handleToggleStack(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleUnhideAll(w http.ResponseWriter, r *http.Request) {
+	s.unhideAll()
+}
+
+func (s *server) unhideAll() {
 	c, err := hyprctl.New()
 	if err != nil {
 		panic(err)
@@ -313,6 +321,46 @@ func (s *server) handleUnhideAll(w http.ResponseWriter, r *http.Request) {
 		if didMove && len(wsState.WindowOrder) > 0 {
 			s.moveWindowsToOrder(c, &ws, wsState.WindowOrder)
 		}
+	}
+}
+
+func (s *server) handleToggleBlingMode(w http.ResponseWriter, r *http.Request) {
+	c, err := hyprctl.New()
+	if err != nil {
+		panic(err)
+	}
+
+	opt, err := c.GetOption("animations:enabled")
+	if err != nil {
+		panic(err)
+	}
+
+	animationsEnabled := opt.Int == 1
+
+	type Opt struct {
+		Name string
+		Val  string
+	}
+
+	var cmds []Opt
+	if animationsEnabled {
+		cmds = []Opt{
+			{"animations:enabled", "no"},
+			{"general:gaps_in", "0"},
+			{"general:gaps_out", "0"},
+			{"decoration:rounding", "0"},
+		}
+	} else {
+		cmds = []Opt{
+			{"animations:enabled", "yes"},
+			{"general:gaps_in", "5"},
+			{"general:gaps_out", "20"},
+			{"decoration:rounding", "10"},
+		}
+	}
+
+	for _, cmd := range cmds {
+		c.SetOption(cmd.Name, cmd.Val)
 	}
 }
 

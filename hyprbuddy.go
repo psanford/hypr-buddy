@@ -25,6 +25,7 @@ var doPing = flag.Bool("ping", false, "ping daemon")
 var doFocusNext = flag.Bool("focus-next", false, "focus next window")
 var doFocusPrev = flag.Bool("focus-prev", false, "focus prev window")
 var doUnhideAll = flag.Bool("unhide-all", false, "reset all hidden windows")
+var doToggleBling = flag.Bool("bling", false, "toggle bling")
 
 const wsMax = 10
 const wsMin = 1
@@ -55,25 +56,26 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("ok\n")
 	} else if *doFocusNext {
 		err := client.NewClient().FocusNext()
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("ok\n")
 	} else if *doFocusPrev {
 		err := client.NewClient().FocusPrev()
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("ok\n")
 	} else if *doUnhideAll {
 		err := client.NewClient().UnhideAll()
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("ok\n")
+	} else if *doToggleBling {
+		err := client.NewClient().ToggleBling()
+		if err != nil {
+			log.Fatal(err)
+		}
 	} else {
 		flag.PrintDefaults()
 		os.Exit(1)

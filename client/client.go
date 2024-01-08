@@ -79,6 +79,11 @@ func (c *Client) UnhideAll() error {
 	return err
 }
 
+func (c *Client) ToggleBling() error {
+	_, err := c.plainRequest("/toggle-bling")
+	return err
+}
+
 func (c *Client) plainRequest(path string) (string, error) {
 	resp, err := c.httpClient.Get(fakeHost + path)
 	if err != nil {
