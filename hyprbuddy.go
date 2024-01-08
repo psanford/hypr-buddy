@@ -22,9 +22,9 @@ var doToggleStack = flag.Bool("toggle-stack", false, "toggle stacked windows")
 var runDaemon = flag.Bool("daemon", false, "run daemon")
 var doPing = flag.Bool("ping", false, "ping daemon")
 
-var doToggleStack2 = flag.Bool("toggle-stack-2", false, "toggle stacked windows")
 var doFocusNext = flag.Bool("focus-next", false, "focus next window")
 var doFocusPrev = flag.Bool("focus-prev", false, "focus prev window")
+var doUnhideAll = flag.Bool("unhide-all", false, "reset all hidden windows")
 
 const wsMax = 10
 const wsMin = 1
@@ -39,8 +39,6 @@ func main() {
 		gotoNextWS(1)
 	} else if *doGotoPrevWorkspace {
 		gotoNextWS(-1)
-	} else if *doToggleStack {
-		toggleStack()
 	} else if *doMasterGrow {
 		masterGrow(0.05)
 	} else if *doMasterShrink {
@@ -52,7 +50,7 @@ func main() {
 		}
 		fmt.Printf("ok\n")
 
-	} else if *doToggleStack2 {
+	} else if *doToggleStack {
 		err := client.NewClient().ToggleStack()
 		if err != nil {
 			log.Fatal(err)
@@ -70,7 +68,12 @@ func main() {
 			log.Fatal(err)
 		}
 		fmt.Printf("ok\n")
-
+	} else if *doUnhideAll {
+		err := client.NewClient().UnhideAll()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("ok\n")
 	} else {
 		flag.PrintDefaults()
 		os.Exit(1)
@@ -154,115 +157,6 @@ func activeWorkspaceWindows(c *hyprctl.Client) []hyprctl.Window {
 	sort.Sort(WindowSort(wsWindows))
 
 	return wsWindows
-}
-
-func hiddenWSName(ws *hyprctl.Workspace) string {
-	return fmt.Sprintf("special:hidden-%d", ws.ID)
-}
-
-func toggleStack() {
-	c, err := hyprctl.New()
-	if err != nil {
-		panic(err)
-	}
-
-	wsInfo, err := c.ActiveWorkspace()
-	if err != nil {
-		panic(err)
-	}
-
-	allWindows, err := c.Windows()
-	if err != nil {
-		panic(err)
-	}
-
-	// starting layout
-	// |---|---|
-	// |   | A |
-	// |   |---|
-	// | M | B |
-	// |   |---|
-	// |   | C |
-	// |---|---|
-
-	sort.Sort(WindowSort(allWindows))
-
-	hiddenName := hiddenWSName(wsInfo)
-
-	var count int
-	var masterWindow hyprctl.Window
-	otherWindows := make([]hyprctl.Window, 0, len(allWindows))
-	for _, w := range allWindows {
-		if w.Workspace.ID != wsInfo.ID {
-			continue
-		}
-
-		if w.Address == wsInfo.LastWindow {
-			masterWindow = w
-		} else {
-			count++
-			otherWindows = append(otherWindows, w)
-			if !w.Floating {
-				c.DispatchRaw(fmt.Sprintf("togglefloating address:%s", w.Address))
-			}
-		}
-	}
-
-	for _, w := range otherWindows {
-		c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %s,address:%s", hiddenName, w.Address))
-	}
-
-	if count == 0 {
-		matchedWindows := make([]hyprctl.Window, 0, 10)
-		for _, w := range allWindows {
-			if w.Workspace.Name != hiddenName {
-				continue
-			}
-
-			c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %d,address:%s", wsInfo.ID, w.Address))
-			matchedWindows = append(matchedWindows, w)
-		}
-
-		sort.Sort(sort.Reverse(WindowSort(matchedWindows)))
-
-		for _, w := range matchedWindows {
-			c.DispatchRaw(fmt.Sprintf("togglefloating address:%s", w.Address))
-		}
-
-		// we're now in this configuration:
-
-		// |---|---|
-		// |   | A |
-		// |   |---|
-		// | B | C |
-		// |   |---|
-		// |   | M |
-		// |---|---|
-
-		c.DispatchRaw(fmt.Sprintf("focuswindow address:%s", masterWindow.Address))
-		c.DispatchRaw("layoutmsg swapwithmaster")
-
-		// |---|---|
-		// |   | A |
-		// |   |---|
-		// | M | C |
-		// |   |---|
-		// |   | B |
-		// |---|---|
-
-		c.DispatchRaw(fmt.Sprintf("focuswindow address:%s", masterWindow.Address))
-		c.DispatchRaw("layoutmsg cycleprev")
-		c.DispatchRaw("layoutmsg swapprev")
-		c.DispatchRaw(fmt.Sprintf("focuswindow address:%s", masterWindow.Address))
-
-		// |---|---|
-		// |   | A |
-		// |   |---|
-		// | M | B |
-		// |   |---|
-		// |   | C |
-		// |---|---|
-	}
 }
 
 type WindowSort []hyprctl.Window

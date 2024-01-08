@@ -60,7 +60,7 @@ func (c *Client) Ping() error {
 }
 
 func (c *Client) ToggleStack() error {
-	_, err := c.plainRequest("/toggleStack")
+	_, err := c.plainRequest("/toggle-stack")
 	return err
 }
 
@@ -71,6 +71,11 @@ func (c *Client) FocusNext() error {
 
 func (c *Client) FocusPrev() error {
 	_, err := c.plainRequest("/focus?n=-1")
+	return err
+}
+
+func (c *Client) UnhideAll() error {
+	_, err := c.plainRequest("/unhide-all")
 	return err
 }
 

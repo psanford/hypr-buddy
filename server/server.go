@@ -67,8 +67,9 @@ func New() *server {
 	mux.HandleFunc("/ping", s.handlePing)
 	mux.HandleFunc("/debug", s.handleDebugState)
 	mux.HandleFunc("/debug/state", s.handleDebugState)
-	mux.HandleFunc("/toggleStack", s.handleToggleStack)
+	mux.HandleFunc("/toggle-stack", s.handleToggleStack)
 	mux.HandleFunc("/focus", s.handleFocus)
+	mux.HandleFunc("/unhide-all", s.handleUnhideAll)
 
 	s.handler = logmiddleware.New(mux)
 
@@ -236,7 +237,7 @@ func (s *server) handleToggleStack(w http.ResponseWriter, r *http.Request) {
 
 	sort.Sort(WindowSort(allWindows))
 
-	hiddenName := hiddenWSName(wsInfo)
+	hiddenName := hiddenWSName(wsInfo.ID)
 
 	if wsState.Layout == LayoutSingleWindow {
 		windowOrder := make([]string, 0, 10)
@@ -267,6 +268,51 @@ func (s *server) handleToggleStack(w http.ResponseWriter, r *http.Request) {
 			c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %d,address:%s", wsInfo.ID, w.Address))
 		}
 		s.moveWindowsToOrder(c, wsInfo, wsState.WindowOrder)
+	}
+}
+
+func (s *server) handleUnhideAll(w http.ResponseWriter, r *http.Request) {
+	c, err := hyprctl.New()
+	if err != nil {
+		panic(err)
+	}
+
+	allWindows, err := c.Windows()
+	if err != nil {
+		panic(err)
+	}
+
+	sort.Sort(WindowSort(allWindows))
+
+	workspaces, err := c.Workspaces()
+	if err != nil {
+		panic(err)
+	}
+
+	for _, ws := range workspaces {
+		if ws.ID < 0 {
+			continue
+		}
+		wsState := s.getWSStateByID(ws.ID)
+
+		if wsState.Layout == LayoutSingleWindow {
+			wsState.Layout = LayoutPrimaryWithStack
+		}
+
+		hiddenName := hiddenWSName(ws.ID)
+
+		var didMove bool
+		for _, w := range allWindows {
+			if w.Workspace.Name != hiddenName {
+				continue
+			}
+
+			c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %d,address:%s", ws.ID, w.Address))
+			didMove = true
+		}
+		if didMove && len(wsState.WindowOrder) > 0 {
+			s.moveWindowsToOrder(c, &ws, wsState.WindowOrder)
+		}
 	}
 }
 
@@ -360,7 +406,7 @@ func (s *server) handleFocus(w http.ResponseWriter, r *http.Request) {
 		windowsByID[w.Address] = w
 	}
 
-	hiddenName := hiddenWSName(wsInfo)
+	hiddenName := hiddenWSName(wsInfo.ID)
 
 	if wsState.Layout == LayoutPrimaryWithStack {
 		cmd := "layoutmsg cyclenext"
@@ -449,7 +495,7 @@ func (s *server) handleWindowOpen(id string) {
 
 	if len(wsState.WindowOrder) > 0 {
 		oldMaster := wsState.WindowOrder[0]
-		hiddenName := hiddenWSName(wsInfo)
+		hiddenName := hiddenWSName(wsInfo.ID)
 		c.DispatchRaw(fmt.Sprintf("movetoworkspacesilent %s,address:%s", hiddenName, oldMaster))
 	}
 
@@ -518,6 +564,6 @@ func (w WindowSort) Swap(i, j int) {
 	w[i], w[j] = w[j], w[i]
 }
 
-func hiddenWSName(ws *hyprctl.Workspace) string {
-	return fmt.Sprintf("special:hidden-%d", ws.ID)
+func hiddenWSName(id int64) string {
+	return fmt.Sprintf("special:hidden-%d", id)
 }

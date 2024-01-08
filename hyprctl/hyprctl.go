@@ -66,6 +66,28 @@ func (c *Client) ActiveWorkspace() (*Workspace, error) {
 	return &resp, nil
 }
 
+func (c *Client) Workspaces() ([]Workspace, error) {
+	conn, err := c.conn()
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to %s: %w", c.p, err)
+	}
+	defer conn.Close()
+
+	_, err = conn.Write([]byte("j/workspaces"))
+	if err != nil {
+		return nil, err
+	}
+
+	d := json.NewDecoder(conn)
+	var resp []Workspace
+	err = d.Decode(&resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 func (c *Client) Monitors() ([]Monitor, error) {
 	conn, err := c.conn()
 	if err != nil {
