@@ -157,12 +157,7 @@ func (s *server) acceptEventsFromHypr(parentCtx context.Context) error {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
-	sig := os.Getenv("HYPRLAND_INSTANCE_SIGNATURE")
-	if sig == "" {
-		return errors.New("HYPRLAND_INSTANCE_SIGNATURE not set")
-	}
-
-	path := fmt.Sprintf("/tmp/hypr/%s/.socket2.sock", sig)
+	path := config.HyprRuntimeDir() + ".socket2.sock"
 
 	conn, err := net.Dial("unix", path)
 	if err != nil {

@@ -9,6 +9,8 @@ import (
 	"log"
 	"net"
 	"os"
+
+	"github.com/psanford/hypr-buddy/config"
 )
 
 type Client struct {
@@ -22,7 +24,7 @@ func New() (*Client, error) {
 		return nil, errors.New("HYPRLAND_INSTANCE_SIGNATURE not set")
 	}
 
-	path := fmt.Sprintf("/tmp/hypr/%s/.socket.sock", sig)
+	path := config.HyprRuntimeDir() + ".socket.sock"
 	return NewFromPath(path)
 }
 
